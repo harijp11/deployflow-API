@@ -1,0 +1,86 @@
+
+# ==============================
+# Environment variables and secrets
+# ==============================
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Certificates and private keys
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# ==============================
+# Go
+# ==============================
+**/vendor/
+**/bin/
+**/tmp/
+**/coverage.out
+**/coverage.html
+*.test
+*.prof
+*.out
+
+# Go build binaries
+*.exe
+*.dll
+*.so
+*.dylib
+
+# ==============================
+# Docker
+# ==============================
+**/.docker/
+*.log
+
+# ==============================
+# IDE and editor
+# ==============================
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+.idea/
+*.swp
+*.swo
+
+# ==============================
+# Operating system
+# ==============================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ==============================
+# Logs
+# ==============================
+logs/
+*.log
+
+# ==============================
+# Temporary files
+# ==============================
+*.tmp
+*.temp
+.cache/
+
+# ==============================
+# Frontend dependencies/build
+# ==============================
+node_modules/
+dist/
+build/
+.next/
+.nuxt/
+coverage/
+
+# ==============================
+# Local database files
+# ==============================
+*.sqlite
+*.sqlite3
