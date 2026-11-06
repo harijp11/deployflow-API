@@ -41,6 +41,16 @@ type DatabaseConfig struct {
 	ConnMaxIdleTime time.Duration
 }
 
+type AuthServiceConfig struct {
+	Issuer                  string
+	Audience                string
+	SigningKey              string
+	AccessTokenTTL          time.Duration
+	RefreshTokenTTL         time.Duration
+	PasswordResetTokenTTL   time.Duration
+	EmailVerificationTTL    time.Duration
+}
+
 func Load() (*Config, error) {
 	// Load the local .env only for local development.
 	// In production, inject environment variables through the deployment platform.
