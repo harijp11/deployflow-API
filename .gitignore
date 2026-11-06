@@ -84,3 +84,5 @@ coverage/
 # ==============================
 *.sqlite
 *.sqlite3
+
+migration.bat
