@@ -1,4 +1,3 @@
-
 package di
 
 import (
@@ -11,9 +10,9 @@ import (
 )
 
 type Container struct {
-	Config       *config.Config
-	DB           *gorm.DB
-	Logger       *slog.Logger
+	Config        *config.Config
+	DB            *gorm.DB
+	Logger        *slog.Logger
 	HealthHandler *health.Handler
 }
 

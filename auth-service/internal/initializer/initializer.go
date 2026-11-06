@@ -1,4 +1,3 @@
-
 package initializer
 
 import (
@@ -18,8 +17,7 @@ func InitializeApp(deps *di.Container) *gin.Engine {
 	registerMiddleware(router, deps.Logger)
 
 	// Health and readiness endpoints.
-	healthHandler := health.NewHandler(deps.DB)
-	health.RegisterRoutes(router, healthHandler)
+	health.RegisterRoutes(router, deps.HealthHandler)
 
 	// Application API routes.
 	routes.RegisterRoutes(router, deps)
