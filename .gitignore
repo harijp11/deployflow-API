@@ -85,4 +85,10 @@ coverage/
 *.sqlite
 *.sqlite3
 
+# Air - Go live reload
+**/tmp/
+.air.log
+
+#=====
+# migration 
 migration.bat
