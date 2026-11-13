@@ -7,10 +7,13 @@ import (
 )
 
 type JWTConfig struct {
-	Issuer          string
-	Audience        string
-	AccessTokenTTL  time.Duration
-	RefreshTokenTTL time.Duration
+	Issuer                string
+	Audience              string
+	SigningKey            string
+	AccessTokenTTL        time.Duration
+	RefreshTokenTTL       time.Duration
+	PasswordResetTokenTTL time.Duration
+	EmailVerificationTTL  time.Duration
 }
 
 func loadJWTConfig() (*JWTConfig, error) {

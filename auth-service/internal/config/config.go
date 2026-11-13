@@ -1,4 +1,3 @@
-
 package config
 
 import (
@@ -12,24 +11,26 @@ import (
 )
 
 type Config struct {
-	App      AppConfig
-	Server   ServerConfig
-	Database DatabaseConfig
-	JWT      JWTConfig
+	App         AppConfig
+	Server      ServerConfig
+	Database    DatabaseConfig
+	JWT         JWTConfig
+	Email       EmailConfig
+	UserService UserServiceConfig
 }
 
 type AppConfig struct {
-    Name        string
-    Environment string
-    GinMode     string
+	Name        string
+	Environment string
+	GinMode     string
 }
 
 type ServerConfig struct {
-	Port            string
-	ReadTimeout     time.Duration
-	WriteTimeout    time.Duration
-	IdleTimeout     time.Duration
-	ShutdownTimeout time.Duration
+	Port              string
+	ReadTimeout       time.Duration
+	WriteTimeout      time.Duration
+	IdleTimeout       time.Duration
+	ShutdownTimeout   time.Duration
 	ReadHeaderTimeout time.Duration
 }
 
@@ -40,6 +41,28 @@ type DatabaseConfig struct {
 	ConnMaxLifetime time.Duration
 	ConnMaxIdleTime time.Duration
 }
+
+type EmailConfig struct {
+	Host     string
+	Port     int
+	Username string
+	Password string
+	From     string
+}
+
+type UserServiceConfig struct {
+	BaseURL string
+}
+
+// type AuthServiceConfig struct {
+// 	Issuer                  string
+// 	Audience                string
+// 	SigningKey              string
+// 	AccessTokenTTL          time.Duration
+// 	RefreshTokenTTL         time.Duration
+// 	PasswordResetTokenTTL   time.Duration
+// 	EmailVerificationTTL    time.Duration
+// }
 
 func Load() (*Config, error) {
 	// Load the local .env only for local development.
@@ -67,6 +90,9 @@ func Load() (*Config, error) {
 			MaxIdleConns:    5,
 			ConnMaxLifetime: 30 * time.Minute,
 			ConnMaxIdleTime: 5 * time.Minute,
+		},
+		UserService: UserServiceConfig{
+			BaseURL: getEnv("USER_SERVICE_URL", "http://localhost:8082"),
 		},
 	}
 
@@ -115,6 +141,13 @@ func (c *Config) validate() error {
 		c.Database.MaxIdleConns < 0 ||
 		c.Database.MaxIdleConns > c.Database.MaxOpenConns {
 		return fmt.Errorf("invalid database connection pool settings")
+	}
+
+	userServiceURL, err := url.ParseRequestURI(c.UserService.BaseURL)
+	if err != nil ||
+		(userServiceURL.Scheme != "http" && userServiceURL.Scheme != "https") ||
+		userServiceURL.Host == "" {
+		return fmt.Errorf("invalid USER_SERVICE_URL")
 	}
 
 	return nil

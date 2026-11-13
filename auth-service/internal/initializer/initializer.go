@@ -16,11 +16,8 @@ func InitializeApp(deps *di.Container) *gin.Engine {
 	// Register global middleware.
 	registerMiddleware(router, deps.Logger)
 
-	// Health and readiness endpoints.
-	health.RegisterRoutes(router, deps.HealthHandler)
-
-	// Application API routes.
-	routes.RegisterRoutes(router, deps)
+	health.RegisterHealthRoutes(router, deps.HealthHandler)
+	routes.RegisterAuthRoutes(router, deps.AuthHandler)
 
 	return router
 }

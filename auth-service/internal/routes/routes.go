@@ -1,17 +1,20 @@
 package routes
 
 import (
-	"deployflow/auth-service/internal/di"
+	"deployflow/auth-service/internal/handlers"
 
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterRoutes(router *gin.Engine, deps *di.Container) {
-	// router.POST("/api/v1/auth/register", deps.AuthHandler.Register)
-	// router.POST("/api/v1/auth/login", deps.AuthHandler.Login)
-	// router.POST("/api/v1/auth/refresh", deps.AuthHandler.RefreshToken)
-	// router.POST("/api/v1/auth/logout", deps.AuthHandler.Logout)
-	// router.POST("/api/v1/auth/forgot-password", deps.AuthHandler.ForgotPassword)
-	// router.POST("/api/v1/auth/reset-password", deps.AuthHandler.ResetPassword)
-	// router.POST("/api/v1/auth/verify-email", deps.AuthHandler.VerifyEmail)
+func RegisterAuthRoutes(router *gin.Engine, authHandler *handlers.AuthHandler) {
+	auth := router.Group("/api/v1/auth")
+	{
+		auth.POST("/register", authHandler.Register)
+		auth.POST("/login", authHandler.Login)
+		auth.POST("/refresh", authHandler.RefreshToken)
+		auth.POST("/logout", authHandler.Logout)
+		auth.POST("/forgot-password", authHandler.ForgotPassword)
+		auth.POST("/reset-password", authHandler.ResetPassword)
+		auth.POST("/verify-email", authHandler.VerifyEmail)
+	}
 }
