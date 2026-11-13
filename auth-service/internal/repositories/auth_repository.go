@@ -9,6 +9,7 @@ import (
 	"deployflow/auth-service/internal/models"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type AuthRepository interface {
@@ -28,10 +29,11 @@ type AuthRepository interface {
 	MarkPasswordResetTokenUsed(ctx context.Context, tokenID uint) error
 	CompletePasswordReset(ctx context.Context, tokenID uint, credential *models.Credential) error
 
-	SaveEmailVerificationToken(ctx context.Context, token *models.EmailVerificationToken) error
-	FindEmailVerificationToken(ctx context.Context, tokenHash string) (*models.EmailVerificationToken, error)
-	CompleteEmailVerification(ctx context.Context, tokenID uint, credential *models.Credential) error
-	SetEmailVerified(ctx context.Context, credential *models.Credential) error
+	CreateOrUpdateRegistrationIntent(ctx context.Context, intent *models.RegistrationIntent) error
+	FindRegistrationIntentByTokenHash(ctx context.Context, tokenHash string) (*models.RegistrationIntent, error)
+	MarkRegistrationEmailSent(ctx context.Context, intentID uint) error
+	MarkRegistrationEmailFailed(ctx context.Context, intentID uint) error
+	CompleteRegistration(ctx context.Context, intentID uint, credential *models.Credential) error
 }
 
 type authRepository struct {
@@ -217,16 +219,31 @@ func (repo *authRepository) CompletePasswordReset(ctx context.Context, tokenID u
 	})
 }
 
-func (repo *authRepository) SaveEmailVerificationToken(ctx context.Context, token *models.EmailVerificationToken) error {
-	return repo.db.WithContext(ctx).Create(token).Error
+func (repo *authRepository) CreateOrUpdateRegistrationIntent(ctx context.Context, intent *models.RegistrationIntent) error {
+	return repo.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "email"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"first_name",
+			"last_name",
+			"password_hash",
+			"company_name",
+			"phone_number",
+			"verification_token_hash",
+			"expires_at",
+			"email_send_status",
+			"email_send_attempts",
+			"last_email_sent_at",
+			"updated_at",
+		}),
+	}).Create(intent).Error
 }
 
-func (repo *authRepository) FindEmailVerificationToken(ctx context.Context, tokenHash string) (*models.EmailVerificationToken, error) {
-	var token models.EmailVerificationToken
+func (repo *authRepository) FindRegistrationIntentByTokenHash(ctx context.Context, tokenHash string) (*models.RegistrationIntent, error) {
+	var intent models.RegistrationIntent
 
 	err := repo.db.WithContext(ctx).
-		Where("token_hash = ? AND used_at IS NULL AND expires_at > ?", tokenHash, time.Now().UTC()).
-		First(&token).Error
+		Where("verification_token_hash = ? AND expires_at > ?", tokenHash, time.Now().UTC()).
+		First(&intent).Error
 
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
@@ -235,61 +252,59 @@ func (repo *authRepository) FindEmailVerificationToken(ctx context.Context, toke
 		return nil, err
 	}
 
-	return &token, nil
+	return &intent, nil
 }
 
-func (repo *authRepository) CompleteEmailVerification(ctx context.Context, tokenID uint, credential *models.Credential) error {
-	return repo.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		now := time.Now().UTC()
-
-		tokenResult := tx.Model(&models.EmailVerificationToken{}).
-			Where("id = ? AND credential_id = ? AND used_at IS NULL AND expires_at > ?", tokenID, credential.ID, now).
-			Update("used_at", now)
-
-		if tokenResult.Error != nil {
-			return tokenResult.Error
-		}
-		if tokenResult.RowsAffected == 0 {
-			return gorm.ErrRecordNotFound
-		}
-
-		credential.EmailVerifiedAt = &now
-		credential.UpdatedAt = now
-
-		credentialResult := tx.Model(&models.Credential{}).
-			Where("id = ? AND email_verified_at IS NULL", credential.ID).
-			Select("EmailVerifiedAt", "UpdatedAt").
-			Updates(credential)
-
-		if credentialResult.Error != nil {
-			return credentialResult.Error
-		}
-		if credentialResult.RowsAffected == 0 {
-			return gorm.ErrRecordNotFound
-		}
-
-		return nil
-	})
-}
-
-func (repo *authRepository) SetEmailVerified(ctx context.Context, credential *models.Credential) error {
+func (repo *authRepository) MarkRegistrationEmailSent(ctx context.Context, intentID uint) error {
 	now := time.Now().UTC()
-	credential.EmailVerifiedAt = &now
-	credential.UpdatedAt = now
 
-	result := repo.db.WithContext(ctx).Model(&models.Credential{}).
-		Where("id = ? AND email_verified_at IS NULL", credential.ID).
-		Select("EmailVerifiedAt", "UpdatedAt").
-		Updates(credential)
+	return repo.db.WithContext(ctx).Model(&models.RegistrationIntent{}).
+		Where("id = ?", intentID).
+		Updates(map[string]interface{}{
+			"email_send_status":   "sent",
+			"email_send_attempts": gorm.Expr("email_send_attempts + 1"),
+			"last_email_sent_at":  now,
+			"updated_at":          now,
+		}).Error
+}
 
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
-	}
+func (repo *authRepository) MarkRegistrationEmailFailed(ctx context.Context, intentID uint) error {
+	now := time.Now().UTC()
 
-	return nil
+	return repo.db.WithContext(ctx).Model(&models.RegistrationIntent{}).
+		Where("id = ?", intentID).
+		Updates(map[string]interface{}{
+			"email_send_status":   "failed",
+			"email_send_attempts": gorm.Expr("email_send_attempts + 1"),
+			"updated_at":          now,
+		}).Error
+}
+
+func (repo *authRepository) CompleteRegistration(ctx context.Context, intentID uint, credential *models.Credential) error {
+	return repo.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var intent models.RegistrationIntent
+
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ? AND expires_at > ?", intentID, time.Now().UTC()).
+			First(&intent).Error
+
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return gorm.ErrRecordNotFound
+		}
+		if err != nil {
+			return err
+		}
+
+		if intent.Email != credential.Email {
+			return errors.New("registration email mismatch")
+		}
+
+		if err := tx.Create(credential).Error; err != nil {
+			return err
+		}
+
+		return tx.Delete(&intent).Error
+	})
 }
 
 var _ AuthRepository = (*authRepository)(nil)

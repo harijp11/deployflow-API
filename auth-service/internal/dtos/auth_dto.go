@@ -3,9 +3,12 @@ package dtos
 import "time"
 
 type RegisterRequestDTO struct {
-	UserID   uint   `json:"user_id" binding:"required"`
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required,min=8"`
+	FirstName   string  `json:"first_name" binding:"required,min=2,max=100"`
+	LastName    string  `json:"last_name" binding:"required,min=1,max=100"`
+	Email       string  `json:"email" binding:"required,email"`
+	Password    string  `json:"password" binding:"required,min=8"`
+	CompanyName *string `json:"company_name"`
+	PhoneNumber *string `json:"phone_number"`
 }
 
 type LoginRequestDTO struct {

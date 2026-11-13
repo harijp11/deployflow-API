@@ -1,3 +1,4 @@
+
 package services
 
 import (
@@ -28,30 +29,44 @@ type AuthServiceInterface interface {
 	VerifyEmail(ctx context.Context, req dtos.VerifyEmailRequestDTO) error
 }
 
+type UserProfile struct {
+	FirstName   string
+	LastName    string
+	Email       string
+	CompanyName *string
+	PhoneNumber *string
+}
+
+type UserCreator interface {
+	CreateUser(ctx context.Context, profile UserProfile) (uint, error)
+}
+
 type AuthService struct {
 	repo        repositories.AuthRepository
 	emailSender EmailSender
 	jwtService  JWTServiceInterface
+	userCreator UserCreator
 	config      config.JWTConfig
 }
 
-
-
-func NewAuthService(repo repositories.AuthRepository, emailSender EmailSender, jwtService JWTServiceInterface, cfg config.JWTConfig) AuthServiceInterface {
+func NewAuthService(
+	repo repositories.AuthRepository,
+	emailSender EmailSender,
+	jwtService JWTServiceInterface,
+	userCreator UserCreator,
+	cfg config.JWTConfig,
+) AuthServiceInterface {
 	return &AuthService{
 		repo:        repo,
 		emailSender: emailSender,
 		jwtService:  jwtService,
+		userCreator: userCreator,
 		config:      cfg,
 	}
 }
 
 func (as *AuthService) Register(ctx context.Context, req dtos.RegisterRequestDTO) error {
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
-
-	if req.UserID == 0 {
-		return utils.NewValidationError("User ID is required", "INVALID_INPUT", "user_id")
-	}
 
 	if err := validateEmail(req.Email); err != nil {
 		return err
@@ -78,42 +93,37 @@ func (as *AuthService) Register(ctx context.Context, req dtos.RegisterRequestDTO
 		return fmt.Errorf("hash password: %w", err)
 	}
 
-	now := time.Now().UTC()
-
-	credential := &models.Credential{
-		UserID:            req.UserID,
-		Email:             req.Email,
-		PasswordHash:      passwordHash,
-		PasswordChangedAt: now,
-		CreatedAt:         now,
-		UpdatedAt:         now,
-	}
-
-	if err := as.repo.CreateCredential(ctx, credential); err != nil {
-		return err
-	}
-
 	token, err := utils.GenerateSecureToken()
 	if err != nil {
-		return fmt.Errorf("generate email verification token: %w", err)
+		return fmt.Errorf("generate registration token: %w", err)
 	}
 
-	verificationToken := &models.EmailVerificationToken{
-		CredentialID: credential.ID,
-		TokenHash:    utils.HashToken(token),
-		ExpiresAt:    now.Add(as.config.EmailVerificationTTL),
-		CreatedAt:    now,
+	now := time.Now().UTC()
+
+	intent := &models.RegistrationIntent{
+		FirstName:             req.FirstName,
+		LastName:              req.LastName,
+		Email:                 req.Email,
+		PasswordHash:          passwordHash,
+		CompanyName:           req.CompanyName,
+		PhoneNumber:           req.PhoneNumber,
+		VerificationTokenHash: utils.HashToken(token),
+		ExpiresAt:             now.Add(as.config.EmailVerificationTTL),
+		EmailSendStatus:       "pending",
+		CreatedAt:             now,
+		UpdatedAt:             now,
 	}
 
-	if err := as.repo.SaveEmailVerificationToken(ctx, verificationToken); err != nil {
+	if err := as.repo.CreateOrUpdateRegistrationIntent(ctx, intent); err != nil {
 		return err
 	}
 
 	if err := as.emailSender.SendVerificationEmail(ctx, req.Email, token); err != nil {
+		_ = as.repo.MarkRegistrationEmailFailed(ctx, intent.ID)
 		return fmt.Errorf("send verification email: %w", err)
 	}
 
-	return nil
+	return as.repo.MarkRegistrationEmailSent(ctx, intent.ID)
 }
 
 func (as *AuthService) Login(ctx context.Context, req dtos.LoginRequestDTO) (*dtos.TokenResponseDTO, error) {
@@ -310,24 +320,52 @@ func (as *AuthService) VerifyEmail(ctx context.Context, req dtos.VerifyEmailRequ
 		return utils.NewUnauthorizedError("Invalid or expired token")
 	}
 
-	verificationToken, err := as.repo.FindEmailVerificationToken(ctx, utils.HashToken(req.Token))
+	if as.userCreator == nil {
+		return errors.New("user service is not configured")
+	}
+
+	intent, err := as.repo.FindRegistrationIntentByTokenHash(
+		ctx,
+		utils.HashToken(req.Token),
+	)
 	if err != nil {
 		return err
 	}
 
-	if verificationToken == nil {
+	if intent == nil {
 		return utils.NewUnauthorizedError("Invalid or expired token")
+	}
+
+	profile := UserProfile{
+		FirstName:   intent.FirstName,
+		LastName:    intent.LastName,
+		Email:       intent.Email,
+		CompanyName: intent.CompanyName,
+		PhoneNumber: intent.PhoneNumber,
+	}
+
+	userID, err := as.userCreator.CreateUser(ctx, profile)
+	if err != nil {
+		return fmt.Errorf("create user profile: %w", err)
 	}
 
 	now := time.Now().UTC()
 
 	credential := &models.Credential{
-		ID:             verificationToken.CredentialID,
-		EmailVerifiedAt: &now,
-		UpdatedAt:       now,
+		UserID:            userID,
+		Email:             intent.Email,
+		PasswordHash:      intent.PasswordHash,
+		EmailVerifiedAt:   &now,
+		PasswordChangedAt: now,
+		CreatedAt:         now,
+		UpdatedAt:         now,
 	}
 
-	return as.repo.CompleteEmailVerification(ctx, verificationToken.ID, credential)
+	if err := as.repo.CompleteRegistration(ctx, intent.ID, credential); err != nil {
+		return fmt.Errorf("complete registration: %w", err)
+	}
+
+	return nil
 }
 
 func (as *AuthService) createTokenPair(ctx context.Context, credential *models.Credential, familyID uuid.UUID) (*dtos.TokenResponseDTO, error) {
@@ -381,4 +419,3 @@ func validatePassword(password string) error {
 
 	return nil
 }
-

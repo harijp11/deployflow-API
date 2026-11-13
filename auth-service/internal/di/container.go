@@ -33,7 +33,7 @@ func NewContainer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) *Contain
 	)
 
 	authEmailSender := services.NewAuthEmailSender(emailSender)
-	authService := services.NewAuthService(authRepo, authEmailSender, jwtService, cfg.JWT)
+	authService := services.NewAuthService(authRepo, authEmailSender, jwtService,)
 	authHandler := handlers.NewAuthHandler(authService)
 
 	return &Container{
