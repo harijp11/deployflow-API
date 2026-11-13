@@ -30,11 +30,12 @@ type AuthServiceInterface interface {
 }
 
 type AuthService struct {
-	repo        repositories.AuthRepository
-	emailSender EmailSender
-	jwtService  JWTServiceInterface
-	userCreator UserCreator
-	config      config.JWTConfig
+	repo         repositories.AuthRepository
+	emailSender  EmailSender
+	jwtService   JWTServiceInterface
+	userCreator  UserCreator
+	config       config.JWTConfig
+	registration config.RegistrationConfig
 }
 
 func NewAuthService(
@@ -43,13 +44,15 @@ func NewAuthService(
 	jwtService JWTServiceInterface,
 	userCreator UserCreator,
 	cfg config.JWTConfig,
+	registration config.RegistrationConfig,
 ) AuthServiceInterface {
 	return &AuthService{
-		repo:        repo,
-		emailSender: emailSender,
-		jwtService:  jwtService,
-		userCreator: userCreator,
-		config:      cfg,
+		repo:         repo,
+		emailSender:  emailSender,
+		jwtService:   jwtService,
+		userCreator:  userCreator,
+		config:       cfg,
+		registration: registration,
 	}
 }
 
@@ -72,6 +75,7 @@ func (as *AuthService) Register(ctx context.Context, req dtos.RegisterRequestDTO
 	if err != nil {
 		return err
 	}
+
 	if existingCredential != nil {
 		return utils.NewConflictError("Email already registered")
 	}
@@ -96,7 +100,7 @@ func (as *AuthService) Register(ctx context.Context, req dtos.RegisterRequestDTO
 		CompanyName:           req.CompanyName,
 		PhoneNumber:           req.PhoneNumber,
 		VerificationTokenHash: utils.HashToken(token),
-		ExpiresAt:             now.Add(as.config.EmailVerificationTTL),
+		ExpiresAt:             now.Add(as.registration.EmailVerificationTTL),
 		EmailSendStatus:       "pending",
 		CreatedAt:             now,
 		UpdatedAt:             now,
@@ -304,25 +308,27 @@ func (as *AuthService) ResetPassword(ctx context.Context, req dtos.ResetPassword
 }
 
 func (as *AuthService) VerifyEmail(ctx context.Context, req dtos.VerifyEmailRequestDTO) error {
-	if strings.TrimSpace(req.Token) == "" {
-		return utils.NewUnauthorizedError("Invalid or expired token")
-	}
+	token := strings.TrimSpace(req.Token)
 
-	if as.userCreator == nil {
-		return errors.New("user service is not configured")
-	}
+    if token == "" {
+        return utils.NewUnauthorizedError("Invalid or expired token")
+    }
 
-	intent, err := as.repo.FindRegistrationIntentByTokenHash(
-		ctx,
-		utils.HashToken(req.Token),
-	)
-	if err != nil {
-		return err
-	}
+    if as.userCreator == nil {
+        return errors.New("user service is not configured")
+    }
 
-	if intent == nil {
-		return utils.NewUnauthorizedError("Invalid or expired token")
-	}
+    intent, err := as.repo.FindRegistrationIntentByTokenHash(
+        ctx,
+        utils.HashToken(token),
+    )
+    if err != nil {
+        return err
+    }
+
+    if intent == nil {
+        return utils.NewUnauthorizedError("Invalid or expired token")
+    }
 
 	profile := UserProfile{
 		FirstName:   intent.FirstName,

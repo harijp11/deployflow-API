@@ -1,11 +1,13 @@
 package handlers
 
 import (
-    "net/http"
+	"log"
+	"net/http"
 
-    "github.com/gin-gonic/gin"
-    "user-service/internal/dtos"
-    "user-service/internal/services"
+	"deployflow/user-service/internal/dtos"
+	"deployflow/user-service/internal/services"
+
+	"github.com/gin-gonic/gin"
 )
 
 type UserHandler struct {
@@ -20,15 +22,36 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
     var req dtos.CreateUserRequestDTO
 
     if err := c.ShouldBindJSON(&req); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid request"})
+        log.Printf("USER VALIDATION ERROR: %v", err)
+        c.JSON(http.StatusBadRequest, gin.H{
+            "message": "Invalid request",
+        })
         return
     }
 
-    userID, err := h.userService.CreateUser(c.Request.Context(), req)
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to create user"})
+    registrationID := c.GetHeader("Idempotency-Key")
+
+    if registrationID == "" {
+        log.Println("USER ERROR: Idempotency-Key header is missing")
+        c.JSON(http.StatusBadRequest, gin.H{
+            "message": "Idempotency-Key is required",
+        })
         return
     }
+
+    userID, err := h.userService.CreateUser(
+    c.Request.Context(),
+    registrationID,
+    req,
+)
+if err != nil {
+    log.Printf("USER SERVICE ERROR: %v", err)
+
+    c.JSON(http.StatusInternalServerError, gin.H{
+        "message": "Failed to create user",
+    })
+    return
+}
 
     c.JSON(http.StatusCreated, gin.H{
         "message": "User created successfully",
