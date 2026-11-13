@@ -1,8 +1,9 @@
 package routes
 
 import (
+    "deployflow/user-service/internal/handlers"
+
     "github.com/gin-gonic/gin"
-    "user-service/internal/handlers"
 )
 
 func RegisterUserRoutes(router *gin.Engine, userHandler *handlers.UserHandler) {

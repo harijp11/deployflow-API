@@ -25,10 +25,7 @@ func NewUserServiceClient(baseURL string) *UserServiceClient {
     }
 }
 
-func (client *UserServiceClient) CreateUser(
-    ctx context.Context,
-    profile services.UserProfile,
-) (uint, error) {
+func (client *UserServiceClient) CreateUser(ctx context.Context,registrationID string, profile services.UserProfile) (uint, error) {
     body, err := json.Marshal(profile)
     if err != nil {
         return 0, err
@@ -45,6 +42,7 @@ func (client *UserServiceClient) CreateUser(
     }
 
     req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("Idempotency-Key", registrationID)
 
     resp, err := client.httpClient.Do(req)
     if err != nil {
@@ -72,5 +70,6 @@ func (client *UserServiceClient) CreateUser(
 
     return result.Data.ID, nil
 }
+
 
 var _ services.UserCreator = (*UserServiceClient)(nil)

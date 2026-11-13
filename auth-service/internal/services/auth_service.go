@@ -1,4 +1,3 @@
-
 package services
 
 import (
@@ -6,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/mail"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -27,18 +27,6 @@ type AuthServiceInterface interface {
 	ForgotPassword(ctx context.Context, req dtos.ForgotPasswordRequestDTO) error
 	ResetPassword(ctx context.Context, req dtos.ResetPasswordRequestDTO) error
 	VerifyEmail(ctx context.Context, req dtos.VerifyEmailRequestDTO) error
-}
-
-type UserProfile struct {
-	FirstName   string
-	LastName    string
-	Email       string
-	CompanyName *string
-	PhoneNumber *string
-}
-
-type UserCreator interface {
-	CreateUser(ctx context.Context, profile UserProfile) (uint, error)
 }
 
 type AuthService struct {
@@ -344,7 +332,8 @@ func (as *AuthService) VerifyEmail(ctx context.Context, req dtos.VerifyEmailRequ
 		PhoneNumber: intent.PhoneNumber,
 	}
 
-	userID, err := as.userCreator.CreateUser(ctx, profile)
+	registrationID := strconv.FormatUint(uint64(intent.ID), 10)
+	userID, err := as.userCreator.CreateUser(ctx, registrationID, profile)
 	if err != nil {
 		return fmt.Errorf("create user profile: %w", err)
 	}
