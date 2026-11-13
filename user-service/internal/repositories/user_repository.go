@@ -3,7 +3,7 @@ package repositories
 import (
     "context"
 
-    "user-service/internal/models"
+    "deployflow/user-service/internal/models"
 
     "gorm.io/gorm"
     "gorm.io/gorm/clause"

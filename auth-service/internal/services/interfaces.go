@@ -8,9 +8,9 @@ type UserCreator interface {
 }
 
 type UserProfile struct {
-    FirstName   string
-    LastName    string
-    Email       string
-    CompanyName *string
-    PhoneNumber *string
+    FirstName   string  `json:"first_name"`
+    LastName    string  `json:"last_name"`
+    Email       string  `json:"email"`
+    CompanyName *string `json:"company_name"`
+    PhoneNumber *string `json:"phone_number"`
 }

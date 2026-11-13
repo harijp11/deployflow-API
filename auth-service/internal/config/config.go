@@ -11,12 +11,13 @@ import (
 )
 
 type Config struct {
-	App         AppConfig
-	Server      ServerConfig
-	Database    DatabaseConfig
-	JWT         JWTConfig
-	Email       EmailConfig
-	UserService UserServiceConfig
+	App          AppConfig
+	Server       ServerConfig
+	Database     DatabaseConfig
+	JWT          JWTConfig
+	Email        EmailConfig
+	UserService  UserServiceConfig
+	Registration RegistrationConfig
 }
 
 type AppConfig struct {
@@ -54,16 +55,6 @@ type UserServiceConfig struct {
 	BaseURL string
 }
 
-// type AuthServiceConfig struct {
-// 	Issuer                  string
-// 	Audience                string
-// 	SigningKey              string
-// 	AccessTokenTTL          time.Duration
-// 	RefreshTokenTTL         time.Duration
-// 	PasswordResetTokenTTL   time.Duration
-// 	EmailVerificationTTL    time.Duration
-// }
-
 func Load() (*Config, error) {
 	// Load the local .env only for local development.
 	// In production, inject environment variables through the deployment platform.
@@ -75,6 +66,7 @@ func Load() (*Config, error) {
 		App: AppConfig{
 			Name:        "auth-service",
 			Environment: getEnv("APP_ENV", "development"),
+			GinMode:     getEnv("GIN_MODE", "debug"),
 		},
 		Server: ServerConfig{
 			Port:              getEnv("AUTH_SERVICE_PORT", "8081"),
@@ -94,6 +86,13 @@ func Load() (*Config, error) {
 		UserService: UserServiceConfig{
 			BaseURL: getEnv("USER_SERVICE_URL", "http://localhost:8082"),
 		},
+		Email: EmailConfig{
+			Host:     getEnv("SMTP_HOST", ""),
+			Port:     getEnvAsInt("SMTP_PORT", 587),
+			Username: getEnv("SMTP_USERNAME", ""),
+			Password: getEnv("SMTP_PASSWORD", ""),
+			From:     getEnv("SMTP_FROM", ""),
+		},
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -105,6 +104,12 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	cfg.JWT = *jwtConfig
+
+	registrationConfig, err := loadRegistrationConfig()
+	if err != nil {
+		return nil, err
+	}
+	cfg.Registration = *registrationConfig
 
 	return cfg, nil
 }
@@ -143,6 +148,15 @@ func (c *Config) validate() error {
 		return fmt.Errorf("invalid database connection pool settings")
 	}
 
+	if c.Email.Host == "" ||
+		c.Email.Username == "" ||
+		c.Email.Password == "" ||
+		c.Email.From == "" ||
+		c.Email.Port < 1 ||
+		c.Email.Port > 65535 {
+		return fmt.Errorf("invalid SMTP configuration")
+	}
+
 	userServiceURL, err := url.ParseRequestURI(c.UserService.BaseURL)
 	if err != nil ||
 		(userServiceURL.Scheme != "http" && userServiceURL.Scheme != "https") ||
@@ -159,4 +173,18 @@ func getEnv(key, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func getEnvAsInt(key string, fallback int) int {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+
+	parsedValue, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+
+	return parsedValue
 }

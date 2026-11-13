@@ -47,6 +47,7 @@ func NewContainer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) *Contain
         jwtService,
         userServiceClient,
         cfg.JWT,
+		cfg.Registration,
     )
 
     // Handlers

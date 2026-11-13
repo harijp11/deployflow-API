@@ -48,18 +48,22 @@ func (repo *authRepository) CreateCredential(ctx context.Context, credential *mo
 	return repo.db.WithContext(ctx).Create(credential).Error
 }
 
-func (repo *authRepository) FindCredentialByEmail(ctx context.Context, email string) (*models.Credential, error) {
-	var credential models.Credential
+func (repo *authRepository) FindCredentialByEmail(ctx context.Context,email string) (*models.Credential, error) {
+    var credential models.Credential
 
-	err := repo.db.WithContext(ctx).Where("LOWER(email) = LOWER(?)", email).First(&credential).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
+    err := repo.db.WithContext(ctx).
+        Where("LOWER(email) = LOWER(?)", email).
+        First(&credential).Error
 
-	return &credential, nil
+    if errors.Is(err, gorm.ErrRecordNotFound) {
+        return nil, nil
+    }
+
+    if err != nil {
+        return nil, err
+    }
+
+    return &credential, nil
 }
 
 func (repo *authRepository) FindCredentialByID(ctx context.Context, credentialID uint) (*models.Credential, error) {
@@ -219,40 +223,49 @@ func (repo *authRepository) CompletePasswordReset(ctx context.Context, tokenID u
 	})
 }
 
-func (repo *authRepository) CreateOrUpdateRegistrationIntent(ctx context.Context, intent *models.RegistrationIntent) error {
-	return repo.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "email"}},
-		DoUpdates: clause.AssignmentColumns([]string{
-			"first_name",
-			"last_name",
-			"password_hash",
-			"company_name",
-			"phone_number",
-			"verification_token_hash",
-			"expires_at",
-			"email_send_status",
-			"email_send_attempts",
-			"last_email_sent_at",
-			"updated_at",
-		}),
-	}).Create(intent).Error
+func (repo *authRepository) CreateOrUpdateRegistrationIntent(ctx context.Context,intent *models.RegistrationIntent) error {
+    return repo.db.WithContext(ctx).Clauses(clause.OnConflict{
+        Columns: []clause.Column{{Name: "email"}},
+        DoUpdates: clause.AssignmentColumns([]string{
+            "first_name",
+            "last_name",
+            "password_hash",
+            "company_name",
+            "phone_number",
+            "verification_token_hash",
+            "expires_at",
+            "email_send_status",
+            "email_send_attempts",
+            "last_email_sent_at",
+            "updated_at",
+        }),
+    }).Create(intent).Error
 }
 
-func (repo *authRepository) FindRegistrationIntentByTokenHash(ctx context.Context, tokenHash string) (*models.RegistrationIntent, error) {
-	var intent models.RegistrationIntent
+func (repo *authRepository) FindRegistrationIntentByTokenHash(
+    ctx context.Context,
+    tokenHash string,
+) (*models.RegistrationIntent, error) {
+    var intent models.RegistrationIntent
 
-	err := repo.db.WithContext(ctx).
-		Where("verification_token_hash = ? AND expires_at > ?", tokenHash, time.Now().UTC()).
-		First(&intent).Error
+    // First, find the registration intent using the token hash.
+    err := repo.db.WithContext(ctx).
+        Where("verification_token_hash = ?", tokenHash).
+        First(&intent).Error
 
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
+    if errors.Is(err, gorm.ErrRecordNotFound) {
+        return nil, nil
+    }
+    if err != nil {
+        return nil, err
+    }
 
-	return &intent, nil
+    // Then, check whether the token has expired.
+    if !intent.ExpiresAt.After(time.Now().UTC()) {
+        return nil, nil
+    }
+
+    return &intent, nil
 }
 
 func (repo *authRepository) MarkRegistrationEmailSent(ctx context.Context, intentID uint) error {
