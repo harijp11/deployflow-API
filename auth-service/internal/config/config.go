@@ -16,6 +16,7 @@ type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
 	JWT      JWTConfig
+	Email    EmailConfig
 }
 
 type AppConfig struct {
@@ -41,15 +42,22 @@ type DatabaseConfig struct {
 	ConnMaxIdleTime time.Duration
 }
 
-type AuthServiceConfig struct {
-	Issuer                  string
-	Audience                string
-	SigningKey              string
-	AccessTokenTTL          time.Duration
-	RefreshTokenTTL         time.Duration
-	PasswordResetTokenTTL   time.Duration
-	EmailVerificationTTL    time.Duration
+type EmailConfig struct {
+	Host     string
+	Port     int
+	Username string
+	Password string
+	From     string
 }
+// type AuthServiceConfig struct {
+// 	Issuer                  string
+// 	Audience                string
+// 	SigningKey              string
+// 	AccessTokenTTL          time.Duration
+// 	RefreshTokenTTL         time.Duration
+// 	PasswordResetTokenTTL   time.Duration
+// 	EmailVerificationTTL    time.Duration
+// }
 
 func Load() (*Config, error) {
 	// Load the local .env only for local development.

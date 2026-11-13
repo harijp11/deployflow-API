@@ -1,5 +1,4 @@
-
-package dto
+package dtos
 
 import "time"
 

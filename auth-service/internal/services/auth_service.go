@@ -1,5 +1,4 @@
-
-package service
+package services
 
 import (
 	"context"
@@ -11,37 +10,34 @@ import (
 	"unicode/utf8"
 
 	"deployflow/auth-service/internal/config"
-	"deployflow/auth-service/internal/dto"
-	"deployflow/auth-service/internal/model"
-	"deployflow/auth-service/internal/repository"
+	"deployflow/auth-service/internal/dtos"
+	"deployflow/auth-service/internal/models"
+	"deployflow/auth-service/internal/repositories"
 	"deployflow/auth-service/internal/utils"
 
 	"github.com/google/uuid"
 )
 
 type AuthServiceInterface interface {
-	Register(ctx context.Context, req dto.RegisterRequestDTO) error
-	Login(ctx context.Context, req dto.LoginRequestDTO) (*dto.TokenResponseDTO, error)
-	RefreshToken(ctx context.Context, req dto.RefreshTokenRequestDTO) (*dto.TokenResponseDTO, error)
-	Logout(ctx context.Context, req dto.LogoutRequestDTO) error
-	ForgotPassword(ctx context.Context, req dto.ForgotPasswordRequestDTO) error
-	ResetPassword(ctx context.Context, req dto.ResetPasswordRequestDTO) error
-	VerifyEmail(ctx context.Context, req dto.VerifyEmailRequestDTO) error
+	Register(ctx context.Context, req dtos.RegisterRequestDTO) error
+	Login(ctx context.Context, req dtos.LoginRequestDTO) (*dtos.TokenResponseDTO, error)
+	RefreshToken(ctx context.Context, req dtos.RefreshTokenRequestDTO) (*dtos.TokenResponseDTO, error)
+	Logout(ctx context.Context, req dtos.LogoutRequestDTO) error
+	ForgotPassword(ctx context.Context, req dtos.ForgotPasswordRequestDTO) error
+	ResetPassword(ctx context.Context, req dtos.ResetPasswordRequestDTO) error
+	VerifyEmail(ctx context.Context, req dtos.VerifyEmailRequestDTO) error
 }
 
 type AuthService struct {
-	repo        repository.AuthRepository
+	repo        repositories.AuthRepository
 	emailSender EmailSender
 	jwtService  JWTServiceInterface
-	config      config.AuthServiceConfig
+	config      config.JWTConfig
 }
 
-type EmailSender interface {
-	SendVerificationEmail(ctx context.Context, email, token string) error
-	SendPasswordResetEmail(ctx context.Context, email, token string) error
-}
 
-func NewAuthService(repo repository.AuthRepository, emailSender EmailSender, jwtService JWTServiceInterface, cfg config.AuthServiceConfig) AuthServiceInterface {
+
+func NewAuthService(repo repositories.AuthRepository, emailSender EmailSender, jwtService JWTServiceInterface, cfg config.JWTConfig) AuthServiceInterface {
 	return &AuthService{
 		repo:        repo,
 		emailSender: emailSender,
@@ -50,7 +46,7 @@ func NewAuthService(repo repository.AuthRepository, emailSender EmailSender, jwt
 	}
 }
 
-func (as *AuthService) Register(ctx context.Context, req dto.RegisterRequestDTO) error {
+func (as *AuthService) Register(ctx context.Context, req dtos.RegisterRequestDTO) error {
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
 	if req.UserID == 0 {
@@ -84,7 +80,7 @@ func (as *AuthService) Register(ctx context.Context, req dto.RegisterRequestDTO)
 
 	now := time.Now().UTC()
 
-	credential := &model.Credential{
+	credential := &models.Credential{
 		UserID:            req.UserID,
 		Email:             req.Email,
 		PasswordHash:      passwordHash,
@@ -102,7 +98,7 @@ func (as *AuthService) Register(ctx context.Context, req dto.RegisterRequestDTO)
 		return fmt.Errorf("generate email verification token: %w", err)
 	}
 
-	verificationToken := &model.EmailVerificationToken{
+	verificationToken := &models.EmailVerificationToken{
 		CredentialID: credential.ID,
 		TokenHash:    utils.HashToken(token),
 		ExpiresAt:    now.Add(as.config.EmailVerificationTTL),
@@ -120,7 +116,7 @@ func (as *AuthService) Register(ctx context.Context, req dto.RegisterRequestDTO)
 	return nil
 }
 
-func (as *AuthService) Login(ctx context.Context, req dto.LoginRequestDTO) (*dto.TokenResponseDTO, error) {
+func (as *AuthService) Login(ctx context.Context, req dtos.LoginRequestDTO) (*dtos.TokenResponseDTO, error) {
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
 	if err := validateEmail(req.Email); err != nil {
@@ -147,7 +143,7 @@ func (as *AuthService) Login(ctx context.Context, req dto.LoginRequestDTO) (*dto
 	return as.createTokenPair(ctx, credential, uuid.New())
 }
 
-func (as *AuthService) RefreshToken(ctx context.Context, req dto.RefreshTokenRequestDTO) (*dto.TokenResponseDTO, error) {
+func (as *AuthService) RefreshToken(ctx context.Context, req dtos.RefreshTokenRequestDTO) (*dtos.TokenResponseDTO, error) {
 	if strings.TrimSpace(req.RefreshToken) == "" {
 		return nil, utils.NewUnauthorizedError("Invalid or expired token")
 	}
@@ -181,7 +177,7 @@ func (as *AuthService) RefreshToken(ctx context.Context, req dto.RefreshTokenReq
 
 	now := time.Now().UTC()
 
-	newSession := &model.AuthSession{
+	newSession := &models.AuthSession{
 		CredentialID: session.CredentialID,
 		UserID:       session.UserID,
 		TokenHash:    utils.HashToken(newRefreshToken),
@@ -200,7 +196,7 @@ func (as *AuthService) RefreshToken(ctx context.Context, req dto.RefreshTokenReq
 		return nil, err
 	}
 
-	return &dto.TokenResponseDTO{
+	return &dtos.TokenResponseDTO{
 		AccessToken:  accessToken,
 		RefreshToken: newRefreshToken,
 		TokenType:    "Bearer",
@@ -208,7 +204,7 @@ func (as *AuthService) RefreshToken(ctx context.Context, req dto.RefreshTokenReq
 	}, nil
 }
 
-func (as *AuthService) Logout(ctx context.Context, req dto.LogoutRequestDTO) error {
+func (as *AuthService) Logout(ctx context.Context, req dtos.LogoutRequestDTO) error {
 	if strings.TrimSpace(req.RefreshToken) == "" {
 		return utils.NewUnauthorizedError("Invalid or expired token")
 	}
@@ -229,7 +225,7 @@ func (as *AuthService) Logout(ctx context.Context, req dto.LogoutRequestDTO) err
 	return as.repo.RevokeSession(ctx, session.ID)
 }
 
-func (as *AuthService) ForgotPassword(ctx context.Context, req dto.ForgotPasswordRequestDTO) error {
+func (as *AuthService) ForgotPassword(ctx context.Context, req dtos.ForgotPasswordRequestDTO) error {
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
 	if err := validateEmail(req.Email); err != nil {
@@ -256,7 +252,7 @@ func (as *AuthService) ForgotPassword(ctx context.Context, req dto.ForgotPasswor
 
 	now := time.Now().UTC()
 
-	resetToken := &model.PasswordResetToken{
+	resetToken := &models.PasswordResetToken{
 		CredentialID: credential.ID,
 		TokenHash:    utils.HashToken(token),
 		ExpiresAt:    now.Add(as.config.PasswordResetTokenTTL),
@@ -274,7 +270,7 @@ func (as *AuthService) ForgotPassword(ctx context.Context, req dto.ForgotPasswor
 	return nil
 }
 
-func (as *AuthService) ResetPassword(ctx context.Context, req dto.ResetPasswordRequestDTO) error {
+func (as *AuthService) ResetPassword(ctx context.Context, req dtos.ResetPasswordRequestDTO) error {
 	if strings.TrimSpace(req.Token) == "" {
 		return utils.NewUnauthorizedError("Invalid or expired token")
 	}
@@ -299,7 +295,7 @@ func (as *AuthService) ResetPassword(ctx context.Context, req dto.ResetPasswordR
 
 	now := time.Now().UTC()
 
-	credential := &model.Credential{
+	credential := &models.Credential{
 		ID:                resetToken.CredentialID,
 		PasswordHash:      passwordHash,
 		PasswordChangedAt: now,
@@ -309,7 +305,7 @@ func (as *AuthService) ResetPassword(ctx context.Context, req dto.ResetPasswordR
 	return as.repo.CompletePasswordReset(ctx, resetToken.ID, credential)
 }
 
-func (as *AuthService) VerifyEmail(ctx context.Context, req dto.VerifyEmailRequestDTO) error {
+func (as *AuthService) VerifyEmail(ctx context.Context, req dtos.VerifyEmailRequestDTO) error {
 	if strings.TrimSpace(req.Token) == "" {
 		return utils.NewUnauthorizedError("Invalid or expired token")
 	}
@@ -325,7 +321,7 @@ func (as *AuthService) VerifyEmail(ctx context.Context, req dto.VerifyEmailReque
 
 	now := time.Now().UTC()
 
-	credential := &model.Credential{
+	credential := &models.Credential{
 		ID:             verificationToken.CredentialID,
 		EmailVerifiedAt: &now,
 		UpdatedAt:       now,
@@ -334,7 +330,7 @@ func (as *AuthService) VerifyEmail(ctx context.Context, req dto.VerifyEmailReque
 	return as.repo.CompleteEmailVerification(ctx, verificationToken.ID, credential)
 }
 
-func (as *AuthService) createTokenPair(ctx context.Context, credential *model.Credential, familyID uuid.UUID) (*dto.TokenResponseDTO, error) {
+func (as *AuthService) createTokenPair(ctx context.Context, credential *models.Credential, familyID uuid.UUID) (*dtos.TokenResponseDTO, error) {
 	accessToken, accessExpiresAt, err := as.jwtService.GenerateAccessToken(credential.UserID, credential.ID)
 	if err != nil {
 		return nil, err
@@ -347,7 +343,7 @@ func (as *AuthService) createTokenPair(ctx context.Context, credential *model.Cr
 
 	now := time.Now().UTC()
 
-	session := &model.AuthSession{
+	session := &models.AuthSession{
 		CredentialID: credential.ID,
 		UserID:       credential.UserID,
 		TokenHash:    utils.HashToken(refreshToken),
@@ -361,7 +357,7 @@ func (as *AuthService) createTokenPair(ctx context.Context, credential *model.Cr
 		return nil, err
 	}
 
-	return &dto.TokenResponseDTO{
+	return &dtos.TokenResponseDTO{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		TokenType:    "Bearer",
@@ -385,3 +381,4 @@ func validatePassword(password string) error {
 
 	return nil
 }
+

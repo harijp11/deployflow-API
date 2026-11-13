@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -77,4 +78,36 @@ func SendInternalErrResp(c *gin.Context) {
 	c.JSON(http.StatusInternalServerError, gin.H{
 		"error": "An unexpected error occurred",
 	})
+}
+
+func RespondAuthError(c *gin.Context, err error) {
+	var validationErr *ValidationError
+	var notFoundErr *ResourceNotFoundError
+	var conflictErr *ConflictError
+	var unauthorizedErr *UnauthorizedError
+	var forbiddenErr *ForbiddenError
+	var badRequestErr *BadRequestError
+
+	switch {
+	case errors.As(err, &validationErr):
+		SendInvalidErrResp(c, validationErr)
+
+	case errors.As(err, &notFoundErr):
+		SendNotFoundErrResp(c, notFoundErr)
+
+	case errors.As(err, &conflictErr):
+		SendConflictErrResp(c, conflictErr)
+
+	case errors.As(err, &unauthorizedErr):
+		SendUnauthorizedErrResp(c, unauthorizedErr)
+
+	case errors.As(err, &forbiddenErr):
+		SendForbiddenErrResp(c, forbiddenErr)
+
+	case errors.As(err, &badRequestErr):
+		SendBadRequestErrResp(c, badRequestErr)
+
+	default:
+		SendInternalErrResp(c)
+	}
 }

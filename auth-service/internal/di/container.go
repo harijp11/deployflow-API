@@ -4,7 +4,11 @@ import (
 	"log/slog"
 
 	"deployflow/auth-service/internal/config"
+	"deployflow/auth-service/internal/handlers"
 	"deployflow/auth-service/internal/health"
+	"deployflow/auth-service/internal/repositories"
+	"deployflow/auth-service/internal/services"
+	"deployflow/shared/email"
 
 	"gorm.io/gorm"
 )
@@ -14,17 +18,29 @@ type Container struct {
 	DB            *gorm.DB
 	Logger        *slog.Logger
 	HealthHandler *health.Handler
+	AuthHandler   *handlers.AuthHandler
 }
 
-func NewContainer(
-	cfg *config.Config,
-	db *gorm.DB,
-	logger *slog.Logger,
-) *Container {
+func NewContainer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) *Container {
+	authRepo := repositories.NewAuthRepository(db)
+	jwtService := services.NewJWTService(cfg.JWT)
+	emailSender := email.NewSMTPSender(
+		cfg.Email.Host,
+		cfg.Email.Port,
+		cfg.Email.Username,
+		cfg.Email.Password,
+		cfg.Email.From,
+	)
+
+	authEmailSender := services.NewAuthEmailSender(emailSender)
+	authService := services.NewAuthService(authRepo, authEmailSender, jwtService, cfg.JWT)
+	authHandler := handlers.NewAuthHandler(authService)
+
 	return &Container{
 		Config:        cfg,
 		DB:            db,
 		Logger:        logger,
 		HealthHandler: health.NewHandler(db),
+		AuthHandler:   authHandler,
 	}
 }

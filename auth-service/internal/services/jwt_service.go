@@ -1,4 +1,4 @@
-package service
+package services
 
 import (
 	"fmt"
@@ -14,10 +14,10 @@ type JWTServiceInterface interface {
 }
 
 type JWTService struct {
-	config config.AuthServiceConfig
+	config config.JWTConfig
 }
 
-func NewJWTService(config config.AuthServiceConfig) JWTServiceInterface {
+func NewJWTService(config config.JWTConfig) JWTServiceInterface {
 	return &JWTService{
 		config: config,
 	}
