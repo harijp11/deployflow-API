@@ -47,8 +47,8 @@ func (repo *authRepository) CreateCredential(ctx context.Context, credential *mo
 	return repo.db.WithContext(ctx).Create(credential).Error
 }
 
-func (repo *authRepository) FindCredentialByEmail(ctx context.Context, email string) (*models.Credential, error) {
-	var credential models.Credential
+func (repo *authRepository) FindCredentialByEmail(ctx context.Context,email string) (*models.Credential, error) {
+    var credential models.Credential
 
 	err := repo.db.WithContext(ctx).
 		Where("LOWER(email) = LOWER(?)", email).
@@ -62,7 +62,15 @@ func (repo *authRepository) FindCredentialByEmail(ctx context.Context, email str
 		return nil, err
 	}
 
-	return &credential, nil
+    if errors.Is(err, gorm.ErrRecordNotFound) {
+        return nil, nil
+    }
+
+    if err != nil {
+        return nil, err
+    }
+
+    return &credential, nil
 }
 
 func (repo *authRepository) FindCredentialByID(ctx context.Context, credentialID uint) (*models.Credential, error) {
@@ -236,19 +244,19 @@ func (repo *authRepository) FindRegistrationIntentByTokenHash(ctx context.Contex
 		Where("verification_token_hash = ?", tokenHash).
 		First(&intent).Error
 
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
+    if errors.Is(err, gorm.ErrRecordNotFound) {
+        return nil, nil
+    }
+    if err != nil {
+        return nil, err
+    }
 
-	// Then, check whether the token has expired.
-	if !intent.ExpiresAt.After(time.Now().UTC()) {
-		return nil, nil
-	}
+    // Then, check whether the token has expired.
+    if !intent.ExpiresAt.After(time.Now().UTC()) {
+        return nil, nil
+    }
 
-	return &intent, nil
+    return &intent, nil
 }
 
 func (repo *authRepository) MarkRegistrationEmailSent(ctx context.Context,intent *models.RegistrationIntent) error {

@@ -1,9 +1,11 @@
 package initializer
 
 import (
+	"log/slog"
+
 	"deployflow/auth-service/internal/di"
-	"deployflow/auth-service/internal/health"
 	"deployflow/auth-service/internal/routes"
+	"deployflow/shared/middleware"
 
 	"github.com/gin-gonic/gin"
 )
@@ -13,11 +15,17 @@ func InitializeApp(deps *di.Container) *gin.Engine {
 
 	router := gin.New()
 
-	// Register global middleware.
 	registerMiddleware(router, deps.Logger)
 
-	health.RegisterHealthRoutes(router, deps.HealthHandler)
 	routes.RegisterAuthRoutes(router, deps.AuthHandler)
 
 	return router
+}
+
+func registerMiddleware(router *gin.Engine, logger *slog.Logger) {
+	router.Use(
+		gin.Recovery(),
+		middleware.RequestIDMiddleware(),
+		middleware.AccessLogMiddleware(),
+	)
 }
