@@ -5,7 +5,7 @@ CREATE TABLE auth_sessions (
     credential_id INT NOT NULL REFERENCES credentials(id) ON DELETE CASCADE,
     user_id INT NOT NULL,
     token_hash VARCHAR(255) NOT NULL UNIQUE,
-    family_id INT NOT NULL,
+    family_id UUID NOT NULL,
     expires_at TIMESTAMP NOT NULL,
     revoked_at TIMESTAMP,
     last_used_at TIMESTAMP,
