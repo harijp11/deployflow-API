@@ -66,10 +66,6 @@ func (repo *authRepository) FindCredentialByEmail(ctx context.Context,email stri
         return nil, nil
     }
 
-    if err != nil {
-        return nil, err
-    }
-
     return &credential, nil
 }
 
