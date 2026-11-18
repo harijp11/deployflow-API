@@ -1,6 +1,5 @@
 package dtos
 
-import "time"
 
 type RegisterRequestDTO struct {
 	FirstName   string  `json:"first_name" binding:"required,min=2,max=100"`
@@ -40,8 +39,6 @@ type VerifyEmailRequestDTO struct {
 type TokenResponseDTO struct {
 	AccessToken  string    `json:"access_token"`
 	RefreshToken string    `json:"refresh_token"`
-	TokenType    string    `json:"token_type"`
-	ExpiresAt    time.Time `json:"expires_at"`
 }
 
 type RegisterResponseDTO struct {

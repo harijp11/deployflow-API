@@ -203,7 +203,7 @@ func (as *AuthService) RefreshToken(ctx context.Context, req dtos.RefreshTokenRe
 		UpdatedAt:    now,
 	}
 
-	accessToken, accessExpiresAt, err := as.jwtService.GenerateAccessToken(credential.UserID, credential.ID)
+	accessToken, _ , err := as.jwtService.GenerateAccessToken(credential.UserID, credential.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -215,8 +215,6 @@ func (as *AuthService) RefreshToken(ctx context.Context, req dtos.RefreshTokenRe
 	return &dtos.TokenResponseDTO{
 		AccessToken:  accessToken,
 		RefreshToken: newRefreshToken,
-		TokenType:    "Bearer",
-		ExpiresAt:    accessExpiresAt,
 	}, nil
 }
 
@@ -378,7 +376,7 @@ func (as *AuthService) VerifyEmail(ctx context.Context, req dtos.VerifyEmailRequ
 }
 
 func (as *AuthService) createTokenPair(ctx context.Context, credential *models.Credential, familyID uuid.UUID) (*dtos.TokenResponseDTO, error) {
-	accessToken, accessExpiresAt, err := as.jwtService.GenerateAccessToken(credential.UserID, credential.ID)
+	accessToken, _ , err := as.jwtService.GenerateAccessToken(credential.UserID, credential.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -407,8 +405,6 @@ func (as *AuthService) createTokenPair(ctx context.Context, credential *models.C
 	return &dtos.TokenResponseDTO{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
-		TokenType:    "Bearer",
-		ExpiresAt:    accessExpiresAt,
 	}, nil
 }
 
