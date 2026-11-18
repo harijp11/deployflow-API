@@ -1,4 +1,3 @@
-
 package repositories
 
 import (
@@ -31,8 +30,8 @@ type AuthRepository interface {
 
 	CreateOrUpdateRegistrationIntent(ctx context.Context, intent *models.RegistrationIntent) error
 	FindRegistrationIntentByTokenHash(ctx context.Context, tokenHash string) (*models.RegistrationIntent, error)
-	MarkRegistrationEmailSent(ctx context.Context, intentID uint) error
-	MarkRegistrationEmailFailed(ctx context.Context, intentID uint) error
+	MarkRegistrationEmailFailed(ctx context.Context, intent *models.RegistrationIntent) error
+	MarkRegistrationEmailSent(ctx context.Context, intent *models.RegistrationIntent) error
 	CompleteRegistration(ctx context.Context, intentID uint, credential *models.Credential) error
 }
 
@@ -51,9 +50,17 @@ func (repo *authRepository) CreateCredential(ctx context.Context, credential *mo
 func (repo *authRepository) FindCredentialByEmail(ctx context.Context,email string) (*models.Credential, error) {
     var credential models.Credential
 
-    err := repo.db.WithContext(ctx).
-        Where("LOWER(email) = LOWER(?)", email).
-        First(&credential).Error
+	err := repo.db.WithContext(ctx).
+		Where("LOWER(email) = LOWER(?)", email).
+		First(&credential).Error
+
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+
+	if err != nil {
+		return nil, err
+	}
 
     if errors.Is(err, gorm.ErrRecordNotFound) {
         return nil, nil
@@ -77,6 +84,8 @@ func (repo *authRepository) FindCredentialByID(ctx context.Context, credentialID
 		return nil, err
 	}
 
+
+	
 	return &credential, nil
 }
 
@@ -223,35 +232,17 @@ func (repo *authRepository) CompletePasswordReset(ctx context.Context, tokenID u
 	})
 }
 
-func (repo *authRepository) CreateOrUpdateRegistrationIntent(ctx context.Context,intent *models.RegistrationIntent) error {
-    return repo.db.WithContext(ctx).Clauses(clause.OnConflict{
-        Columns: []clause.Column{{Name: "email"}},
-        DoUpdates: clause.AssignmentColumns([]string{
-            "first_name",
-            "last_name",
-            "password_hash",
-            "company_name",
-            "phone_number",
-            "verification_token_hash",
-            "expires_at",
-            "email_send_status",
-            "email_send_attempts",
-            "last_email_sent_at",
-            "updated_at",
-        }),
-    }).Create(intent).Error
+func (repo *authRepository) CreateOrUpdateRegistrationIntent(ctx context.Context, intent *models.RegistrationIntent) error {
+	return repo.db.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "email"}}, UpdateAll: true}).Create(intent).Error
 }
 
-func (repo *authRepository) FindRegistrationIntentByTokenHash(
-    ctx context.Context,
-    tokenHash string,
-) (*models.RegistrationIntent, error) {
-    var intent models.RegistrationIntent
+func (repo *authRepository) FindRegistrationIntentByTokenHash(ctx context.Context,tokenHash string) (*models.RegistrationIntent, error) {
+	var intent models.RegistrationIntent
 
-    // First, find the registration intent using the token hash.
-    err := repo.db.WithContext(ctx).
-        Where("verification_token_hash = ?", tokenHash).
-        First(&intent).Error
+	// First, find the registration intent using the token hash.
+	err := repo.db.WithContext(ctx).
+		Where("verification_token_hash = ?", tokenHash).
+		First(&intent).Error
 
     if errors.Is(err, gorm.ErrRecordNotFound) {
         return nil, nil
@@ -268,29 +259,20 @@ func (repo *authRepository) FindRegistrationIntentByTokenHash(
     return &intent, nil
 }
 
-func (repo *authRepository) MarkRegistrationEmailSent(ctx context.Context, intentID uint) error {
-	now := time.Now().UTC()
-
-	return repo.db.WithContext(ctx).Model(&models.RegistrationIntent{}).
-		Where("id = ?", intentID).
-		Updates(map[string]interface{}{
-			"email_send_status":   "sent",
-			"email_send_attempts": gorm.Expr("email_send_attempts + 1"),
-			"last_email_sent_at":  now,
-			"updated_at":          now,
-		}).Error
+func (repo *authRepository) MarkRegistrationEmailSent(ctx context.Context,intent *models.RegistrationIntent) error {
+	return repo.db.WithContext(ctx).
+		Model(&models.RegistrationIntent{}).
+		Where("id = ?", intent.ID).
+		Select("email_send_status", "email_send_attempts", "last_email_sent_at", "updated_at").
+		Updates(intent).Error
 }
 
-func (repo *authRepository) MarkRegistrationEmailFailed(ctx context.Context, intentID uint) error {
-	now := time.Now().UTC()
-
-	return repo.db.WithContext(ctx).Model(&models.RegistrationIntent{}).
-		Where("id = ?", intentID).
-		Updates(map[string]interface{}{
-			"email_send_status":   "failed",
-			"email_send_attempts": gorm.Expr("email_send_attempts + 1"),
-			"updated_at":          now,
-		}).Error
+func (repo *authRepository) MarkRegistrationEmailFailed(ctx context.Context,intent *models.RegistrationIntent) error {
+	return repo.db.WithContext(ctx).
+		Model(&models.RegistrationIntent{}).
+		Where("id = ?", intent.ID).
+		Select("email_send_status", "email_send_attempts", "updated_at").
+		Updates(intent).Error
 }
 
 func (repo *authRepository) CompleteRegistration(ctx context.Context, intentID uint, credential *models.Credential) error {

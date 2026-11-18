@@ -111,11 +111,25 @@ func (as *AuthService) Register(ctx context.Context, req dtos.RegisterRequestDTO
 	}
 
 	if err := as.emailSender.SendVerificationEmail(ctx, req.Email, token); err != nil {
-		_ = as.repo.MarkRegistrationEmailFailed(ctx, intent.ID)
+		now := time.Now().UTC()
+
+		intent.EmailSendStatus = "failed"
+		intent.EmailSendAttempts++
+		intent.UpdatedAt = now
+
+		_ = as.repo.MarkRegistrationEmailFailed(ctx, intent)
+
 		return fmt.Errorf("send verification email: %w", err)
 	}
 
-	return as.repo.MarkRegistrationEmailSent(ctx, intent.ID)
+	now = time.Now().UTC()
+
+	intent.EmailSendStatus = "sent"
+	intent.EmailSendAttempts++
+	intent.LastEmailSentAt = &now
+	intent.UpdatedAt = now
+
+	return as.repo.MarkRegistrationEmailSent(ctx, intent)
 }
 
 func (as *AuthService) Login(ctx context.Context, req dtos.LoginRequestDTO) (*dtos.TokenResponseDTO, error) {
