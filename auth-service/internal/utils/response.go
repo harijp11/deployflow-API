@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -15,7 +16,15 @@ func Response(c *gin.Context, statusCode int, message string, data any) {
 		}
 
 		if data != nil {
-			response["data"] = data
+			jsonData, err := json.Marshal(data)
+			if err == nil {
+				var fields map[string]interface{}
+				if err := json.Unmarshal(jsonData, &fields); err == nil {
+					for key, value := range fields {
+						response[key] = value
+					}
+				}
+			}
 		}
 
 		c.JSON(statusCode, response)
