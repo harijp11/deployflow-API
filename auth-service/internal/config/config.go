@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -21,9 +22,10 @@ type Config struct {
 }
 
 type AppConfig struct {
-	Name        string
-	Environment string
-	GinMode     string
+	Name               string
+	Environment        string
+	GinMode            string
+	CORSAllowedOrigins []string
 }
 
 type ServerConfig struct {
@@ -64,9 +66,10 @@ func Load() (*Config, error) {
 
 	cfg := &Config{
 		App: AppConfig{
-			Name:        "auth-service",
-			Environment: getEnv("APP_ENV", "development"),
-			GinMode:     getEnv("GIN_MODE", "debug"),
+			Name:               "auth-service",
+			Environment:        getEnv("APP_ENV", "development"),
+			GinMode:            getEnv("GIN_MODE", "debug"),
+			CORSAllowedOrigins: getEnvAsSlice("CORS_ALLOWED_ORIGINS"),
 		},
 		Server: ServerConfig{
 			Port:              getEnv("AUTH_SERVICE_PORT", "8081"),
@@ -187,4 +190,23 @@ func getEnvAsInt(key string, fallback int) int {
 	}
 
 	return parsedValue
+}
+
+func getEnvAsSlice(key string) []string {
+	value := os.Getenv(key)
+	if value == "" {
+		return nil
+	}
+
+	values := strings.Split(value, ",")
+	result := make([]string, 0, len(values))
+
+	for _, item := range values {
+		item = strings.TrimSpace(item)
+		if item != "" {
+			result = append(result, item)
+		}
+	}
+
+	return result
 }

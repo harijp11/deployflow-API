@@ -71,14 +71,9 @@ func (ah *AuthHandler) RefreshToken(c *gin.Context) {
 }
 
 func (ah *AuthHandler) Logout(c *gin.Context) {
-	var req dtos.LogoutRequestDTO
+	sessionID := c.GetUint("session_id")
 
-	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.Response(c, http.StatusBadRequest, "Invalid request body", nil)
-		return
-	}
-
-	if err := ah.authService.Logout(c.Request.Context(), req); err != nil {
+	if err := ah.authService.Logout(c.Request.Context(), sessionID); err != nil {
 		utils.RespondAuthError(c, err)
 		return
 	}

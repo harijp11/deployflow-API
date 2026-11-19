@@ -10,7 +10,7 @@ import (
 )
 
 type JWTServiceInterface interface {
-	GenerateAccessToken(userID, credentialID uint) (string, time.Time, error)
+	GenerateAccessToken(userID, credentialID, sessionID uint) (string, time.Time, error)
 }
 
 type JWTService struct {
@@ -23,9 +23,7 @@ func NewJWTService(config config.JWTConfig) JWTServiceInterface {
 	}
 }
 
-func (js *JWTService) GenerateAccessToken(
-	userID, credentialID uint,
-) (string, time.Time, error) {
+func (js *JWTService) GenerateAccessToken(userID, credentialID, sessionID uint) (string, time.Time, error) {
 	now := time.Now()
 	expiresAt := now.Add(js.config.AccessTokenTTL)
 
@@ -37,6 +35,7 @@ func (js *JWTService) GenerateAccessToken(
 		"exp":           expiresAt.Unix(),
 		"user_id":       userID,
 		"credential_id": credentialID,
+		"session_id":    sessionID,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
