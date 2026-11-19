@@ -15,17 +15,18 @@ func InitializeApp(deps *di.Container) *gin.Engine {
 
 	router := gin.New()
 
-	registerMiddleware(router, deps.Logger)
+	registerMiddleware(router, deps.Logger, deps.Config.App.CORSAllowedOrigins)
 
 	routes.RegisterAuthRoutes(router, deps.AuthHandler)
 
 	return router
 }
 
-func registerMiddleware(router *gin.Engine, logger *slog.Logger) {
+func registerMiddleware(router *gin.Engine, logger *slog.Logger, allowedOrigins []string) {
 	router.Use(
 		gin.Recovery(),
 		middleware.RequestIDMiddleware(),
+		middleware.CORSMiddleware(allowedOrigins),
 		middleware.AccessLogMiddleware(),
 	)
 }

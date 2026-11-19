@@ -23,7 +23,7 @@ type AuthServiceInterface interface {
 	Register(ctx context.Context, req dtos.RegisterRequestDTO) error
 	Login(ctx context.Context, req dtos.LoginRequestDTO) (*dtos.TokenResponseDTO, error)
 	RefreshToken(ctx context.Context, req dtos.RefreshTokenRequestDTO) (*dtos.TokenResponseDTO, error)
-	Logout(ctx context.Context, req dtos.LogoutRequestDTO) error
+	Logout(ctx context.Context, sessionID uint) error
 	ForgotPassword(ctx context.Context, req dtos.ForgotPasswordRequestDTO) error
 	ResetPassword(ctx context.Context, req dtos.ResetPasswordRequestDTO) error
 	VerifyEmail(ctx context.Context, req dtos.VerifyEmailRequestDTO) error
@@ -203,12 +203,12 @@ func (as *AuthService) RefreshToken(ctx context.Context, req dtos.RefreshTokenRe
 		UpdatedAt:    now,
 	}
 
-	accessToken, _ , err := as.jwtService.GenerateAccessToken(credential.UserID, credential.ID)
-	if err != nil {
+	if err := as.repo.RotateSession(ctx, session.ID, newSession); err != nil {
 		return nil, err
 	}
 
-	if err := as.repo.RotateSession(ctx, session.ID, newSession); err != nil {
+	accessToken, _ , err := as.jwtService.GenerateAccessToken(credential.UserID, credential.ID, session.ID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -218,22 +218,18 @@ func (as *AuthService) RefreshToken(ctx context.Context, req dtos.RefreshTokenRe
 	}, nil
 }
 
-func (as *AuthService) Logout(ctx context.Context, req dtos.LogoutRequestDTO) error {
-	if strings.TrimSpace(req.RefreshToken) == "" {
+func (as *AuthService) Logout(ctx context.Context, sessionID uint) error {
+	if sessionID == 0 {
 		return utils.NewUnauthorizedError("Invalid or expired token")
 	}
 
-	session, err := as.repo.FindSessionByTokenHash(ctx, utils.HashToken(req.RefreshToken))
+	session, err := as.repo.FindSessionByID(ctx, sessionID)
 	if err != nil {
 		return err
 	}
 
-	if session == nil {
+	if session == nil || session.RevokedAt != nil {
 		return utils.NewUnauthorizedError("Invalid or expired token")
-	}
-
-	if session.RevokedAt != nil {
-		return nil
 	}
 
 	return as.repo.RevokeSession(ctx, session.ID)
@@ -376,11 +372,6 @@ func (as *AuthService) VerifyEmail(ctx context.Context, req dtos.VerifyEmailRequ
 }
 
 func (as *AuthService) createTokenPair(ctx context.Context, credential *models.Credential, familyID uuid.UUID) (*dtos.TokenResponseDTO, error) {
-	accessToken, _ , err := as.jwtService.GenerateAccessToken(credential.UserID, credential.ID)
-	if err != nil {
-		return nil, err
-	}
-
 	refreshToken, err := utils.GenerateSecureToken()
 	if err != nil {
 		return nil, fmt.Errorf("generate refresh token: %w", err)
@@ -399,6 +390,11 @@ func (as *AuthService) createTokenPair(ctx context.Context, credential *models.C
 	}
 
 	if err := as.repo.CreateSession(ctx, session); err != nil {
+		return nil, err
+	}
+
+	accessToken, _ , err := as.jwtService.GenerateAccessToken(credential.UserID, credential.ID, session.ID,)
+	if err != nil {
 		return nil, err
 	}
 

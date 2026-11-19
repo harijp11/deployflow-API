@@ -19,6 +19,7 @@ type AuthRepository interface {
 
 	CreateSession(ctx context.Context, session *models.AuthSession) error
 	FindSessionByTokenHash(ctx context.Context, tokenHash string) (*models.AuthSession, error)
+	FindSessionByID(ctx context.Context, sessionID uint) (*models.AuthSession, error)
 	RevokeSession(ctx context.Context, sessionID uint) error
 	RevokeAllSessions(ctx context.Context, credentialID uint) error
 	RotateSession(ctx context.Context, oldSessionID uint, newSession *models.AuthSession) error
@@ -103,6 +104,24 @@ func (repo *authRepository) FindSessionByTokenHash(ctx context.Context, tokenHas
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &session, nil
+}
+
+func (repo *authRepository) FindSessionByID(ctx context.Context, sessionID uint) (*models.AuthSession, error) {
+	var session models.AuthSession
+
+	err := repo.db.WithContext(ctx).
+		Where("id = ?", sessionID).
+		First(&session).Error
+
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+
 	if err != nil {
 		return nil, err
 	}
