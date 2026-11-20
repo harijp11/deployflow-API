@@ -21,7 +21,7 @@ import (
 
 type AuthServiceInterface interface {
 	Register(ctx context.Context, req dtos.RegisterRequestDTO) error
-	Login(ctx context.Context, req dtos.LoginRequestDTO) (*dtos.TokenResponseDTO, error)
+	Login(ctx context.Context, req dtos.LoginRequestDTO) (*dtos.LoginResponseDTO, error)
 	RefreshToken(ctx context.Context, req dtos.RefreshTokenRequestDTO) (*dtos.TokenResponseDTO, error)
 	Logout(ctx context.Context, sessionID uint) error
 	ForgotPassword(ctx context.Context, req dtos.ForgotPasswordRequestDTO) error
@@ -132,7 +132,7 @@ func (as *AuthService) Register(ctx context.Context, req dtos.RegisterRequestDTO
 	return as.repo.MarkRegistrationEmailSent(ctx, intent)
 }
 
-func (as *AuthService) Login(ctx context.Context, req dtos.LoginRequestDTO) (*dtos.TokenResponseDTO, error) {
+func (as *AuthService) Login(ctx context.Context, req dtos.LoginRequestDTO) (*dtos.LoginResponseDTO, error) {
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
 	if err := validateEmail(req.Email); err != nil {
@@ -156,7 +156,20 @@ func (as *AuthService) Login(ctx context.Context, req dtos.LoginRequestDTO) (*dt
 		return nil, utils.NewForbiddenError("Email is not verified")
 	}
 
-	return as.createTokenPair(ctx, credential, uuid.New())
+	tokenPair, err := as.createTokenPair(ctx, credential, uuid.New())
+	if err != nil {
+		return nil, err
+	}
+
+	return &dtos.LoginResponseDTO{
+		AccessToken:  tokenPair.AccessToken,
+		RefreshToken: tokenPair.RefreshToken,
+		User: dtos.AuthenticatedUserDTO{
+			ID:    credential.UserID,
+			Email: credential.Email,
+		},
+	}, nil
+
 }
 
 func (as *AuthService) RefreshToken(ctx context.Context, req dtos.RefreshTokenRequestDTO) (*dtos.TokenResponseDTO, error) {
@@ -207,7 +220,7 @@ func (as *AuthService) RefreshToken(ctx context.Context, req dtos.RefreshTokenRe
 		return nil, err
 	}
 
-	accessToken, _ , err := as.jwtService.GenerateAccessToken(credential.UserID, credential.ID, session.ID)
+	accessToken, _, err := as.jwtService.GenerateAccessToken(credential.UserID, credential.ID, session.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -318,25 +331,25 @@ func (as *AuthService) ResetPassword(ctx context.Context, req dtos.ResetPassword
 func (as *AuthService) VerifyEmail(ctx context.Context, req dtos.VerifyEmailRequestDTO) error {
 	token := strings.TrimSpace(req.Token)
 
-    if token == "" {
-        return utils.NewUnauthorizedError("Invalid or expired token")
-    }
+	if token == "" {
+		return utils.NewUnauthorizedError("Invalid or expired token")
+	}
 
-    if as.userCreator == nil {
-        return errors.New("user service is not configured")
-    }
+	if as.userCreator == nil {
+		return errors.New("user service is not configured")
+	}
 
-    intent, err := as.repo.FindRegistrationIntentByTokenHash(
-        ctx,
-        utils.HashToken(token),
-    )
-    if err != nil {
-        return err
-    }
+	intent, err := as.repo.FindRegistrationIntentByTokenHash(
+		ctx,
+		utils.HashToken(token),
+	)
+	if err != nil {
+		return err
+	}
 
-    if intent == nil {
-        return utils.NewUnauthorizedError("Invalid or expired token")
-    }
+	if intent == nil {
+		return utils.NewUnauthorizedError("Invalid or expired token")
+	}
 
 	profile := UserProfile{
 		FirstName:   intent.FirstName,
@@ -393,7 +406,7 @@ func (as *AuthService) createTokenPair(ctx context.Context, credential *models.C
 		return nil, err
 	}
 
-	accessToken, _ , err := as.jwtService.GenerateAccessToken(credential.UserID, credential.ID, session.ID,)
+	accessToken, _, err := as.jwtService.GenerateAccessToken(credential.UserID, credential.ID, session.ID)
 	if err != nil {
 		return nil, err
 	}

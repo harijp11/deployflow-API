@@ -4,6 +4,7 @@ import (
 	"log/slog"
 
 	"deployflow/auth-service/internal/di"
+	authmiddleware "deployflow/auth-service/internal/middlewares"
 	"deployflow/auth-service/internal/routes"
 	"deployflow/shared/middleware"
 
@@ -17,7 +18,13 @@ func InitializeApp(deps *di.Container) *gin.Engine {
 
 	registerMiddleware(router, deps.Logger, deps.Config.App.CORSAllowedOrigins)
 
-	routes.RegisterAuthRoutes(router, deps.AuthHandler)
+	jwtMiddleware := authmiddleware.AuthMiddleware(
+		deps.Config.JWT.SigningKey,
+		deps.Config.JWT.Issuer,
+		deps.Config.JWT.Audience,
+	)
+
+	routes.RegisterAuthRoutes(router,deps.AuthHandler,jwtMiddleware)
 
 	return router
 }

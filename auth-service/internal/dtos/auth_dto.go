@@ -41,13 +41,19 @@ type TokenResponseDTO struct {
 	RefreshToken string    `json:"refresh_token"`
 }
 
-type RegisterResponseDTO struct {
-	Message string `json:"message"`
+type LoginResponseDTO  struct {
+	AccessToken  string    `json:"access_token"`
+	RefreshToken string    `json:"refresh_token"`
+	User         AuthenticatedUserDTO `json:"user"`
 }
 
-type LoginResponseDTO struct {
+type AuthenticatedUserDTO struct {
+	ID    uint   `json:"id"`
+	Email string `json:"email"`
+}
+
+type RegisterResponseDTO struct {
 	Message string `json:"message"`
-	Tokens  TokenResponseDTO `json:"tokens"`
 }
 
 type RefreshTokenResponseDTO struct {
