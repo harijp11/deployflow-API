@@ -29,7 +29,7 @@ func CORSMiddleware(allowedOrigins []string) gin.HandlerFunc {
 			"Content-Length",
 			"X-Request-ID",
 		},
-		AllowCredentials: false,
+		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	})
 }

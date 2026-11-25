@@ -6,6 +6,7 @@ import (
 	"deployflow/auth-service/internal/dtos"
 	"deployflow/auth-service/internal/services"
 	"deployflow/auth-service/internal/utils"
+	"github.com/mileusna/useragent"
 
 	"github.com/gin-gonic/gin"
 )
@@ -44,7 +45,34 @@ func (ah *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	tokens, err := ah.authService.Login(c.Request.Context(), req)
+	// Parse User-Agent
+	userAgentString := c.Request.UserAgent()
+	ua := useragent.Parse(userAgentString)
+
+	// Identify device type
+	deviceType := "Desktop"
+
+	if ua.Mobile {
+		deviceType = "Mobile"
+	} else if ua.Tablet {
+		deviceType = "Tablet"
+	}
+
+	// Capture device information
+	deviceInfo := dtos.DeviceInfo{
+		DeviceName:      ua.OS + " " + deviceType,
+		DeviceType:      deviceType,
+		Browser:         ua.Name,
+		OperatingSystem: ua.OS,
+		IPAddress:       c.ClientIP(),
+		UserAgent:       userAgentString,
+	}
+
+	tokens, err := ah.authService.Login(
+		c.Request.Context(),
+		req,
+		deviceInfo,
+	)
 	if err != nil {
 		utils.RespondAuthError(c, err)
 		return
@@ -54,20 +82,20 @@ func (ah *AuthHandler) Login(c *gin.Context) {
 }
 
 func (ah *AuthHandler) RefreshToken(c *gin.Context) {
-	var req dtos.RefreshTokenRequestDTO
+    var req dtos.RefreshTokenRequestDTO
 
-	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.Response(c, http.StatusBadRequest, "Invalid request body", nil)
-		return
-	}
+    if err := c.ShouldBindJSON(&req); err != nil {
+        utils.Response(c, http.StatusBadRequest, "Invalid request body", nil)
+        return
+    }
 
-	tokens, err := ah.authService.RefreshToken(c.Request.Context(), req)
-	if err != nil {
-		utils.RespondAuthError(c, err)
-		return
-	}
+    tokens, err := ah.authService.RefreshToken(c.Request.Context(), req)
+    if err != nil {
+        utils.RespondAuthError(c, err)
+        return
+    }
 
-	utils.Response(c, http.StatusOK, "Token refreshed successfully", tokens)
+    utils.Response(c, http.StatusOK, "Token refreshed successfully", tokens)
 }
 
 func (ah *AuthHandler) Logout(c *gin.Context) {
@@ -127,4 +155,20 @@ func (ah *AuthHandler) VerifyEmail(c *gin.Context) {
 	}
 
 	utils.Response(c, http.StatusOK, "Email verified successfully", nil)
+}
+
+func (ah *AuthHandler) ResendVerification(c *gin.Context) {
+	var req dtos.ResendVerificationRequestDTO
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.Response(c, http.StatusBadRequest, "Invalid request body", nil)
+		return
+	}
+
+	if err := ah.authService.ResendVerification(c.Request.Context(), req); err != nil {
+		utils.RespondAuthError(c, err)
+		return
+	}
+
+	utils.Response(c, http.StatusOK, "If a pending registration exists for this email, a verification email will be sent.", nil)
 }
