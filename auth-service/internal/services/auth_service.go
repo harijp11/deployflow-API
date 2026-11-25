@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/mail"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -21,12 +22,13 @@ import (
 
 type AuthServiceInterface interface {
 	Register(ctx context.Context, req dtos.RegisterRequestDTO) error
-	Login(ctx context.Context, req dtos.LoginRequestDTO) (*dtos.LoginResponseDTO, error)
+	Login(ctx context.Context, req dtos.LoginRequestDTO, deviceInfo dtos.DeviceInfo) (*dtos.LoginResponseDTO, error)
 	RefreshToken(ctx context.Context, req dtos.RefreshTokenRequestDTO) (*dtos.TokenResponseDTO, error)
 	Logout(ctx context.Context, sessionID uint) error
 	ForgotPassword(ctx context.Context, req dtos.ForgotPasswordRequestDTO) error
 	ResetPassword(ctx context.Context, req dtos.ResetPasswordRequestDTO) error
 	VerifyEmail(ctx context.Context, req dtos.VerifyEmailRequestDTO) error
+	ResendVerification(ctx context.Context, req dtos.ResendVerificationRequestDTO) error
 }
 
 type AuthService struct {
@@ -34,7 +36,7 @@ type AuthService struct {
 	emailSender  EmailSender
 	jwtService   JWTServiceInterface
 	userCreator  UserCreator
-	config       config.JWTConfig
+	config       *config.Config
 	registration config.RegistrationConfig
 }
 
@@ -43,7 +45,7 @@ func NewAuthService(
 	emailSender EmailSender,
 	jwtService JWTServiceInterface,
 	userCreator UserCreator,
-	cfg config.JWTConfig,
+	cfg *config.Config,
 	registration config.RegistrationConfig,
 ) AuthServiceInterface {
 	return &AuthService{
@@ -132,7 +134,8 @@ func (as *AuthService) Register(ctx context.Context, req dtos.RegisterRequestDTO
 	return as.repo.MarkRegistrationEmailSent(ctx, intent)
 }
 
-func (as *AuthService) Login(ctx context.Context, req dtos.LoginRequestDTO) (*dtos.LoginResponseDTO, error) {
+func (as *AuthService) Login(ctx context.Context, req dtos.LoginRequestDTO, deviceInfo dtos.DeviceInfo) (*dtos.LoginResponseDTO, error) {
+
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
 	if err := validateEmail(req.Email); err != nil {
@@ -156,7 +159,12 @@ func (as *AuthService) Login(ctx context.Context, req dtos.LoginRequestDTO) (*dt
 		return nil, utils.NewForbiddenError("Email is not verified")
 	}
 
-	tokenPair, err := as.createTokenPair(ctx, credential, uuid.New())
+	tokenPair, err := as.createTokenPair(
+		ctx,
+		credential,
+		uuid.New(),
+		deviceInfo,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +177,6 @@ func (as *AuthService) Login(ctx context.Context, req dtos.LoginRequestDTO) (*dt
 			Email: credential.Email,
 		},
 	}, nil
-
 }
 
 func (as *AuthService) RefreshToken(ctx context.Context, req dtos.RefreshTokenRequestDTO) (*dtos.TokenResponseDTO, error) {
@@ -207,23 +214,26 @@ func (as *AuthService) RefreshToken(ctx context.Context, req dtos.RefreshTokenRe
 	now := time.Now().UTC()
 
 	newSession := &models.AuthSession{
-		CredentialID: session.CredentialID,
-		UserID:       session.UserID,
-		TokenHash:    utils.HashToken(newRefreshToken),
-		FamilyID:     session.FamilyID,
-		ExpiresAt:    now.Add(as.config.RefreshTokenTTL),
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		CredentialID:    session.CredentialID,
+		UserID:          session.UserID,
+		TokenHash:       utils.HashToken(newRefreshToken),
+		FamilyID:        session.FamilyID,
+		DeviceName:      session.DeviceName,
+		DeviceType:      session.DeviceType,
+		Browser:         session.Browser,
+		OperatingSystem: session.OperatingSystem,
+		IPAddress:       session.IPAddress,
+		UserAgent:       session.UserAgent,
+		ExpiresAt:       now.Add(as.config.JWT.RefreshTokenTTL),
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	}
 
 	if err := as.repo.RotateSession(ctx, session.ID, newSession); err != nil {
 		return nil, err
 	}
 
-	accessToken, _, err := as.jwtService.GenerateAccessToken(credential.UserID, credential.ID, session.ID)
-	if err != nil {
-		return nil, err
-	}
+	accessToken, _, err := as.jwtService.GenerateAccessToken(credential.UserID, credential.ID, newSession.ID)
 
 	return &dtos.TokenResponseDTO{
 		AccessToken:  accessToken,
@@ -278,7 +288,7 @@ func (as *AuthService) ForgotPassword(ctx context.Context, req dtos.ForgotPasswo
 	resetToken := &models.PasswordResetToken{
 		CredentialID: credential.ID,
 		TokenHash:    utils.HashToken(token),
-		ExpiresAt:    now.Add(as.config.PasswordResetTokenTTL),
+		ExpiresAt:    now.Add(as.config.JWT.PasswordResetTokenTTL),
 		CreatedAt:    now,
 	}
 
@@ -286,7 +296,13 @@ func (as *AuthService) ForgotPassword(ctx context.Context, req dtos.ForgotPasswo
 		return err
 	}
 
-	if err := as.emailSender.SendPasswordResetEmail(ctx, req.Email, token); err != nil {
+	resetURL := fmt.Sprintf(
+		"%s/reset-password?token=%s",
+		strings.TrimRight(as.config.App.FrontendURL, "/"),
+		url.QueryEscape(token),
+	)
+
+	if err := as.emailSender.SendPasswordResetEmail(ctx, req.Email, resetURL); err != nil {
 		return fmt.Errorf("send password reset email: %w", err)
 	}
 
@@ -384,7 +400,67 @@ func (as *AuthService) VerifyEmail(ctx context.Context, req dtos.VerifyEmailRequ
 	return nil
 }
 
-func (as *AuthService) createTokenPair(ctx context.Context, credential *models.Credential, familyID uuid.UUID) (*dtos.TokenResponseDTO, error) {
+func (as *AuthService) ResendVerification(ctx context.Context, req dtos.ResendVerificationRequestDTO) error {
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+
+	if err := validateEmail(req.Email); err != nil {
+		return err
+	}
+
+	if as.emailSender == nil {
+		return errors.New("email sender is not configured")
+	}
+
+	intent, err := as.repo.FindRegistrationIntentByEmail(ctx, req.Email)
+	if err != nil {
+		return err
+	}
+
+	// Use a generic response to avoid revealing account registration status.
+	if intent == nil {
+		return nil
+	}
+
+	if intent.ExpiresAt.Before(time.Now().UTC()) {
+		return utils.NewUnauthorizedError("Registration verification has expired. Please register again.")
+	}
+
+	token, err := utils.GenerateSecureToken()
+	if err != nil {
+		return fmt.Errorf("generate verification token: %w", err)
+	}
+
+	now := time.Now().UTC()
+
+	intent.VerificationTokenHash = utils.HashToken(token)
+	intent.ExpiresAt = now.Add(as.registration.EmailVerificationTTL)
+	intent.EmailSendStatus = "pending"
+	intent.EmailSendAttempts++
+	intent.UpdatedAt = now
+
+	if err := as.repo.CreateOrUpdateRegistrationIntent(ctx, intent); err != nil {
+		return err
+	}
+
+	if err := as.emailSender.SendVerificationEmail(ctx, req.Email, token); err != nil {
+		intent.EmailSendStatus = "failed"
+		intent.UpdatedAt = time.Now().UTC()
+
+		_ = as.repo.MarkRegistrationEmailFailed(ctx, intent)
+
+		return fmt.Errorf("resend verification email: %w", err)
+	}
+
+	now = time.Now().UTC()
+	intent.EmailSendStatus = "sent"
+	intent.LastEmailSentAt = &now
+	intent.UpdatedAt = now
+
+	return as.repo.MarkRegistrationEmailSent(ctx, intent)
+}
+
+func (as *AuthService) createTokenPair(ctx context.Context, credential *models.Credential, familyID uuid.UUID, deviceInfo dtos.DeviceInfo) (*dtos.TokenResponseDTO, error) {
+
 	refreshToken, err := utils.GenerateSecureToken()
 	if err != nil {
 		return nil, fmt.Errorf("generate refresh token: %w", err)
@@ -397,16 +473,28 @@ func (as *AuthService) createTokenPair(ctx context.Context, credential *models.C
 		UserID:       credential.UserID,
 		TokenHash:    utils.HashToken(refreshToken),
 		FamilyID:     familyID,
-		ExpiresAt:    now.Add(as.config.RefreshTokenTTL),
-		CreatedAt:    now,
-		UpdatedAt:    now,
+
+		DeviceName:      &deviceInfo.DeviceName,
+		DeviceType:      &deviceInfo.DeviceType,
+		Browser:         &deviceInfo.Browser,
+		OperatingSystem: &deviceInfo.OperatingSystem,
+		IPAddress:       &deviceInfo.IPAddress,
+		UserAgent:       &deviceInfo.UserAgent,
+
+		ExpiresAt: now.Add(as.config.JWT.RefreshTokenTTL),
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 
 	if err := as.repo.CreateSession(ctx, session); err != nil {
 		return nil, err
 	}
 
-	accessToken, _, err := as.jwtService.GenerateAccessToken(credential.UserID, credential.ID, session.ID)
+	accessToken, _, err := as.jwtService.GenerateAccessToken(
+		credential.UserID,
+		credential.ID,
+		session.ID,
+	)
 	if err != nil {
 		return nil, err
 	}

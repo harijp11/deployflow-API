@@ -17,6 +17,9 @@ type AuthRepository interface {
 	FindCredentialByID(ctx context.Context, credentialID uint) (*models.Credential, error)
 	UpdateCredential(ctx context.Context, credential *models.Credential) error
 
+	FindRegistrationIntentByEmail(ctx context.Context, email string) (*models.RegistrationIntent, error)
+    UpdateRegistrationIntent(ctx context.Context, intent *models.RegistrationIntent) error
+
 	CreateSession(ctx context.Context, session *models.AuthSession) error
 	FindSessionByTokenHash(ctx context.Context, tokenHash string) (*models.AuthSession, error)
 	FindSessionByID(ctx context.Context, sessionID uint) (*models.AuthSession, error)
@@ -92,6 +95,31 @@ func (repo *authRepository) UpdateCredential(ctx context.Context, credential *mo
 		Select("PasswordHash", "PasswordChangedAt", "UpdatedAt").
 		Updates(credential).Error
 }
+
+func (repo *authRepository) FindRegistrationIntentByEmail(ctx context.Context, email string) (*models.RegistrationIntent, error) {
+    var intent models.RegistrationIntent
+
+    err := repo.db.WithContext(ctx).
+        Where("LOWER(email) = LOWER(?)", email).
+        First(&intent).Error
+
+    if errors.Is(err, gorm.ErrRecordNotFound) {
+        return nil, nil
+    }
+
+    if err != nil {
+        return nil, err
+    }
+
+    return &intent, nil
+}
+
+func (repo *authRepository) UpdateRegistrationIntent(ctx context.Context, intent *models.RegistrationIntent) error {
+    return repo.db.WithContext(ctx).
+        Save(intent).Error
+}
+
+
 
 func (repo *authRepository) CreateSession(ctx context.Context, session *models.AuthSession) error {
 	return repo.db.WithContext(ctx).Create(session).Error
@@ -247,8 +275,20 @@ func (repo *authRepository) CompletePasswordReset(ctx context.Context, tokenID u
 	})
 }
 
-func (repo *authRepository) CreateOrUpdateRegistrationIntent(ctx context.Context, intent *models.RegistrationIntent) error {
-	return repo.db.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "email"}}, UpdateAll: true}).Create(intent).Error
+func (repo *authRepository) CreateOrUpdateRegistrationIntent(ctx context.Context,intent *models.RegistrationIntent) error {
+    intentID := intent.ID
+    intent.ID = 0
+
+    err := repo.db.WithContext(ctx).
+        Clauses(clause.OnConflict{
+            Columns: []clause.Column{{Name: "email"}},
+            UpdateAll: true,
+        }).
+        Create(intent).Error
+
+    intent.ID = intentID
+
+    return err
 }
 
 func (repo *authRepository) FindRegistrationIntentByTokenHash(ctx context.Context,tokenHash string) (*models.RegistrationIntent, error) {

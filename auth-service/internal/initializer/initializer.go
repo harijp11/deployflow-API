@@ -16,7 +16,7 @@ func InitializeApp(deps *di.Container) *gin.Engine {
 
 	router := gin.New()
 
-	registerMiddleware(router, deps.Logger, deps.Config.App.CORSAllowedOrigins)
+	registerMiddleware(router, deps.Logger)
 
 	jwtMiddleware := authmiddleware.AuthMiddleware(
 		deps.Config.JWT.SigningKey,
@@ -29,11 +29,10 @@ func InitializeApp(deps *di.Container) *gin.Engine {
 	return router
 }
 
-func registerMiddleware(router *gin.Engine, logger *slog.Logger, allowedOrigins []string) {
+func registerMiddleware(router *gin.Engine, logger *slog.Logger) {
 	router.Use(
 		gin.Recovery(),
 		middleware.RequestIDMiddleware(),
-		middleware.CORSMiddleware(allowedOrigins),
 		middleware.AccessLogMiddleware(),
 	)
 }

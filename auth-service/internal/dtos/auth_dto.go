@@ -76,3 +76,16 @@ type ResetPasswordResponseDTO struct {
 type VerifyEmailResponseDTO struct {
 	Message string `json:"message"`
 }
+
+type ResendVerificationRequestDTO struct {
+    Email string `json:"email" binding:"required,email"`
+}
+
+type DeviceInfo struct {
+    DeviceName      string `json:"device_name"`
+    DeviceType      string `json:"device_type"`
+    Browser         string `json:"browser"`
+    OperatingSystem string `json:"operating_system"`
+    IPAddress       string `json:"ip_address"`
+    UserAgent       string `json:"user_agent"`
+}

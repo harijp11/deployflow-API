@@ -26,6 +26,7 @@ type AppConfig struct {
 	Environment        string
 	GinMode            string
 	CORSAllowedOrigins []string
+	FrontendURL        string
 }
 
 type ServerConfig struct {
@@ -70,6 +71,7 @@ func Load() (*Config, error) {
 			Environment:        getEnv("APP_ENV", "development"),
 			GinMode:            getEnv("GIN_MODE", "debug"),
 			CORSAllowedOrigins: getEnvAsSlice("CORS_ALLOWED_ORIGINS"),
+			FrontendURL:        getEnv("FRONTEND_URL", "http://localhost:4200"),
 		},
 		Server: ServerConfig{
 			Port:              getEnv("AUTH_SERVICE_PORT", "8081"),
