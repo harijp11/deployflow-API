@@ -15,7 +15,7 @@ import (
 	"deployflow/auth-service/internal/dtos"
 	"deployflow/auth-service/internal/models"
 	"deployflow/auth-service/internal/repositories"
-	"deployflow/auth-service/internal/utils"
+	"deployflow/shared/utils"
 
 	"github.com/google/uuid"
 )

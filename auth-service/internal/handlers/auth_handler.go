@@ -5,7 +5,7 @@ import (
 
 	"deployflow/auth-service/internal/dtos"
 	"deployflow/auth-service/internal/services"
-	"deployflow/auth-service/internal/utils"
+	"deployflow/shared/utils"
 	"github.com/mileusna/useragent"
 
 	"github.com/gin-gonic/gin"
